@@ -5,97 +5,124 @@ import { Camera } from '@mediapipe/camera_utils';
 import { useStore } from '../store';
 
 const EyeTracker = () => {
+  const { setDistracted } = useStore();
   const webcamRef = useRef(null);
-  const { setDistracted, isCalibrating, setCalibration, calibration } = useStore();
-  
-  // DEBUG STATE: Store values to display on screen
-  const [debugValues, setDebugValues] = useState({ yaw: 0, pitch: 0, status: "Unknown" });
-
-  const onResults = (results) => {
-    if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
-
-    const landmarks = results.multiFaceLandmarks[0];
-
-    // --- GEOMETRY MATH ---
-    // Nose Tip: 1, Left Ear: 234, Right Ear: 454
-    const nose = landmarks[1];
-    const leftEar = landmarks[234];
-    const rightEar = landmarks[454];
-
-    // Calculate Center X of your head (Average of ears)
-    const earMidpointX = (leftEar.x + rightEar.x) / 2;
-    const earMidpointY = (leftEar.y + rightEar.y) / 2;
-
-    // RAW MOVEMENTS
-    // Yaw: Positive = Turning Left (usually), Negative = Turning Right
-    const rawYaw = nose.x - earMidpointX;
-    // Pitch: Positive = Looking Down, Negative = Looking Up
-    const rawPitch = nose.y - earMidpointY;
-
-    // --- CALIBRATION ---
-    if (isCalibrating) {
-      setCalibration(rawPitch, rawYaw);
-      return;
-    }
-
-    // --- NORMALIZED VALUES (Current - Calibrated) ---
-    const yaw = rawYaw - calibration.yawOffset;
-    const pitch = rawPitch - calibration.pitchOffset;
-
-    // --- SENSITIVITY SETTINGS (Lower = More Sensitive) ---
-    const YAW_THRESHOLD = 0.04;  // Try lowering this if it won't trigger (e.g. 0.02)
-    const PITCH_THRESHOLD = 0.03;
-
-    // LOGIC: Distracted if turning head significantly Left or Right
-    const isLookingAway = Math.abs(yaw) > YAW_THRESHOLD;
-    
-    // UPDATE STATE
-    // We send 'true' if distracted, 'false' if focused
-    setDistracted(isLookingAway);
-
-    // UPDATE DEBUG DISPLAY (For you to see)
-    setDebugValues({
-      yaw: yaw.toFixed(3),
-      pitch: pitch.toFixed(3),
-      status: isLookingAway ? "❌ DISTRACTED" : "✅ FOCUSED"
-    });
-  };
+  const [showDebug, setShowDebug] = useState(false);
+  const [metrics, setMetrics] = useState({
+    yaw: "0.00",
+    pitch: "0.00",
+    status: "Initializing..."
+  });
 
   useEffect(() => {
-    const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+    });
+
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+
     faceMesh.onResults(onResults);
 
-    if (webcamRef.current) {
+    if (webcamRef.current && webcamRef.current.video) {
       const camera = new Camera(webcamRef.current.video, {
         onFrame: async () => {
           if (webcamRef.current?.video) await faceMesh.send({ image: webcamRef.current.video });
         },
-        width: 640, height: 480
+        width: 640,
+        height: 480,
       });
       camera.start();
     }
-  }, [isCalibrating]);
+  }, []);
+
+  const onResults = (results) => {
+    if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+      setDistracted(true);
+      setMetrics(prev => ({ ...prev, status: "NO FACE DETECTED" }));
+      return;
+    }
+
+    const landmarks = results.multiFaceLandmarks[0];
+    const nose = landmarks[1];
+    const leftEar = landmarks[234];
+    const rightEar = landmarks[454];
+
+    // Yaw Calculation
+    const distToLeft = Math.abs(nose.x - leftEar.x);
+    const totalDist = Math.abs(leftEar.x - rightEar.x);
+    const yawRatio = distToLeft / totalDist;
+
+    // Pitch Calculation
+    const earY = (leftEar.y + rightEar.y) / 2;
+    const pitchDiff = nose.y - earY;
+
+    // Thresholds
+    const isDistractedNow = yawRatio < 0.30 || yawRatio > 0.70 || pitchDiff > 0.10;
+
+    setDistracted(isDistractedNow);
+    setMetrics({
+      yaw: yawRatio.toFixed(2),
+      pitch: pitchDiff.toFixed(2),
+      status: isDistractedNow ? "❌ DISTRACTED" : "✅ FOCUSED"
+    });
+  };
 
   return (
-    <div className="fixed top-5 left-5 z-50">
-      {/* 1. VISIBLE WEBCAM (So you know it's working) */}
-      <Webcam 
-        ref={webcamRef} 
-        className="w-48 rounded-lg shadow-lg mb-2" 
-        mirrored={true} // Flip if looking Left moves the number the wrong way
-      />
+    // CHANGED: 'bottom-5' -> 'top-5' to move it to the Top Left
+    <div className="fixed top-5 left-5 z-50 flex flex-col items-start gap-2">
       
-      {/* 2. DATA BOX (The Matrix View) */}
-      <div className="bg-black/80 text-white p-4 rounded font-mono text-sm border border-green-500">
-        <p className="font-bold text-green-400 mb-2">👁 SYSTEM DIAGNOSTICS</p>
-        <p>STATUS: <span className={debugValues.status.includes("DISTRACTED") ? "text-red-500 font-bold" : "text-green-500"}>{debugValues.status}</span></p>
-        <hr className="border-gray-600 my-2"/>
-        <p>Yaw (Turn): {debugValues.yaw}</p>
-        <p>Threshold: 0.04</p>
-        <p className="text-gray-400 text-xs mt-2">
-          (If Yaw &gt; 0.04, it pauses)
-        </p>
+      {/* 1. TOGGLE BUTTON */}
+      <button
+        onClick={() => setShowDebug(!showDebug)}
+        className={`px-4 py-2 rounded-full font-bold text-xs shadow-lg transition-all border
+          ${showDebug 
+            ? "bg-gray-800 text-white border-gray-600 hover:bg-gray-700" 
+            : "bg-cyan-500 text-black border-cyan-400 hover:bg-cyan-400"
+          }`}
+      >
+        {showDebug ? "Hide Debug Overlay" : "Show Debug Overlay"}
+      </button>
+
+      {/* 2. THE DEBUG PANEL */}
+      <div 
+        className={`bg-black/90 p-3 rounded-xl border border-cyan-500/50 shadow-2xl backdrop-blur-md w-64 transition-all duration-300
+          ${showDebug ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-10 pointer-events-none absolute"}`}
+      >
+        
+        {/* A. Webcam Feed (ALWAYS MOUNTED) */}
+        <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden border border-gray-700 mb-3">
+          <Webcam 
+            ref={webcamRef} 
+            className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" 
+          />
+          <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+            <div className="w-full h-[1px] bg-cyan-500 absolute"></div>
+            <div className="h-full w-[1px] bg-cyan-500 absolute"></div>
+          </div>
+        </div>
+
+        {/* B. Metrics */}
+        <div className="font-mono text-[10px] space-y-1">
+          <div className={`text-center font-bold text-sm mb-2 p-1 rounded
+            ${metrics.status.includes("FOCUSED") ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}>
+            {metrics.status}
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-gray-400">
+            <div className="bg-gray-800 p-1 rounded">
+              <span className="block text-cyan-500 text-[8px] uppercase">Yaw Ratio</span>
+              {metrics.yaw}
+            </div>
+            <div className="bg-gray-800 p-1 rounded">
+              <span className="block text-purple-500 text-[8px] uppercase">Pitch Diff</span>
+              {metrics.pitch}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
