@@ -2,48 +2,52 @@ import React, { useRef, useEffect, useState } from 'react';
 import * as Tone from 'tone';
 import { useStore } from '../store';
 
-// --- DEMO DATA ---
+// --- UPDATED DEMO DATA: MAPPED TO YOUTUBE TIMESTAMPS ---
 const DEMO_CHAPTERS = [
   { time: 0, title: "Algorithm Scope & Graph Types" },
-  { time: 8, title: "Dijkstra vs. Minimum Spanning Trees" },
-  { time: 14, title: "Initialization & Distance Table Setup" },
-  { time: 46, title: "Edge Relaxation & Distance Updates" }
+  { time: 15, title: "Initialization & Infinity Values" },
+  { time: 46, title: "Edge Relaxation Logic" },
+  { time: 80, title: "Greedy Node Selection" },
+  { time: 130, title: "Final Complexity Recap" }
 ];
 
 const FOCUS_CHECKS = [
   {
     id: "q1",
-    triggerTime: 10,
-    question: "How does Dijkstra's objective differ from a Minimum Spanning Tree (MST)?",
+    triggerTime: 15, // End of the intro
+    rewindTime: 0,   // Start of intro
+    question: "What is the primary difference between Dijkstra's and Minimum Spanning Trees (MST)?",
     choices: [
-      "Dijkstra connects all nodes with lowest total weight.",
-      "Dijkstra finds the shortest path from a source to all other nodes.",
-      "Dijkstra only works on undirected graphs.",
-      "There is no difference between the two."
+      "Dijkstra connects all nodes with the lowest possible total weight.",
+      "Dijkstra finds the shortest path from a single source to every other node.",
+      "Dijkstra only works on undirected graphs without cycles.",
+      "There is no algorithmic difference between the two."
     ],
     correctIndex: 1
   },
   {
     id: "q2",
-    triggerTime: 30,
-    question: "In the distance table setup, what does a value of 'Infinity' represent?",
+    triggerTime: 45, // After table setup explanation
+    rewindTime: 15,  // Start of table setup
+    question: "Why does the algorithm initialize all non-starting node distances to 'Infinity'?",
     choices: [
-      "A node that has already been visited.",
-      "A node that is currently unreachable or not yet calculated.",
-      "A negative edge weight error.",
-      "The end of the graph traversal."
+      "To mark those nodes as physically unreachable.",
+      "To ensure any valid path found during relaxation is initially recognized as shorter.",
+      "Because the algorithm cannot process negative edge weights.",
+      "To signify the node has already been added to the visited list."
     ],
     correctIndex: 1
   },
   {
     id: "q3",
-    triggerTime: 48,
-    question: "What is 'Edge Relaxation' in this context?",
+    triggerTime: 75, // After the first relaxation step
+    rewindTime: 46,  // Start of relaxation explanation
+    question: "In the 'Relaxation' step, when is a node's value in the distance table updated?",
     choices: [
-      "Removing edges with high weights from the graph.",
-      "Updating a node's distance if a shorter path is discovered.",
-      "Reducing the complexity of the adjacency matrix.",
-      "Allowing the algorithm to skip certain nodes."
+      "Every time the algorithm visits a new neighbor node.",
+      "Only if the sum of the source distance and edge weight is less than the current table value.",
+      "When the user manually overrides the greedy selection.",
+      "After all nodes have been explored at least once."
     ],
     correctIndex: 1
   }
@@ -152,6 +156,7 @@ const SmartPlayer = () => {
     if (correct) {
       feedbackSynth.current.triggerAttackRelease(["C4", "E4", "G4"], "4n");
       setCompletedTimes(prev => new Set(prev).add(activeCheck.triggerTime));
+      
       if (isFirstAttempt) {
         setMetrics(prev => ({ 
           ...prev, 
@@ -173,7 +178,8 @@ const SmartPlayer = () => {
       }));
 
       setTimeout(() => {
-        videoRef.current.currentTime = Math.max(0, activeCheck.triggerTime - 10); 
+        // Rewind to specific Concept Explanation Time
+        videoRef.current.currentTime = activeCheck.rewindTime; 
         setActiveCheck(null);
         setIsCorrect(null);
         setSelectedAnswer(null);
@@ -205,7 +211,6 @@ const SmartPlayer = () => {
       <div className={`relative w-full max-w-5xl aspect-video shadow-2xl rounded-xl overflow-hidden bg-[#0d1117] border-4 transition-all duration-300 z-20 ${videoUrl ? (isDistracted ? 'border-red-600 animate-pulse' : 'border-cyan-400') : 'border-gray-800'}`}>
         {!videoUrl ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer group" onClick={() => fileInputRef.current.click()}>
-            {/* VIBRANT GUITAR: Lowered margin-bottom from mb-6 to mb-2 for tighter grouping */}
             <div className="text-8xl mb-2 animate-bounce drop-shadow-[0_0_15px_rgba(220,38,38,0.6)]">🎸</div>
             <h2 className="text-4xl font-bold text-white uppercase tracking-tighter text-center">Stage Empty</h2>
             <button className="mt-4 px-6 py-2 bg-cyan-500/20 text-cyan-400 border border-cyan-500 rounded font-mono uppercase group-hover:bg-cyan-500 group-hover:text-black transition-colors">Load Video Here</button>
@@ -250,7 +255,6 @@ const SmartPlayer = () => {
                             <div className="border-b border-gray-800 pb-4">
                                 <p className="text-gray-400 font-mono text-[10px] uppercase mb-1">First-Attempt Mastery</p>
                                 <p className="text-4xl font-bold text-cyan-400">{metrics.firstAttemptCorrect} / {metrics.totalQuestions}</p>
-                                <p className="text-xs text-gray-500 mt-1 italic">Correct answers on first try.</p>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-gray-900 p-4 rounded-xl border border-gray-800">
@@ -310,3 +314,6 @@ const SmartPlayer = () => {
 };
 
 export default SmartPlayer;
+
+// Incorprating the multiple chocie questions to be based on 
+// real time what the lecturer is talking abt (test if anything got broke nwhen incorpating this)
