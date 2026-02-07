@@ -66,7 +66,7 @@ const SmartPlayer = () => {
     totalQuestions: FOCUS_CHECKS.length,
     distractionCount: 0,
     showReport: false,
-    questionsAttempted: new Set() // Tracks which Qs have been seen at least once
+    questionsAttempted: new Set() 
   });
 
   // MIC CHECK STATE
@@ -147,15 +147,11 @@ const SmartPlayer = () => {
     setSelectedAnswer(index);
     const correct = index === activeCheck.correctIndex;
     setIsCorrect(correct);
-
-    // LOGIC: Check if this is the first time they are seeing THIS question ID
     const isFirstAttempt = !metrics.questionsAttempted.has(activeCheck.id);
 
     if (correct) {
       feedbackSynth.current.triggerAttackRelease(["C4", "E4", "G4"], "4n");
       setCompletedTimes(prev => new Set(prev).add(activeCheck.triggerTime));
-      
-      // Update metrics: Only increment if they were never wrong on this ID before
       if (isFirstAttempt) {
         setMetrics(prev => ({ 
           ...prev, 
@@ -171,15 +167,12 @@ const SmartPlayer = () => {
       }, 1500);
     } else {
       feedbackSynth.current.triggerAttackRelease(["F#2", "G2"], "2n");
-      
-      // Mark that they've now attempted this question (so future correct answers don't count for First-Attempt)
       setMetrics(prev => ({ 
         ...prev, 
         questionsAttempted: new Set(prev.questionsAttempted).add(activeCheck.id) 
       }));
 
       setTimeout(() => {
-        // Rewind to start of context (usually 10s before the trigger)
         videoRef.current.currentTime = Math.max(0, activeCheck.triggerTime - 10); 
         setActiveCheck(null);
         setIsCorrect(null);
@@ -209,12 +202,13 @@ const SmartPlayer = () => {
       </div>
 
       {/* MAIN STAGE */}
-      <div className={`relative w-full max-w-5xl aspect-video shadow-2xl rounded-xl overflow-hidden bg-black border-4 transition-all duration-300 z-20 ${videoUrl ? (isDistracted ? 'border-red-600 animate-pulse' : 'border-cyan-400') : 'border-gray-800'}`}>
+      <div className={`relative w-full max-w-5xl aspect-video shadow-2xl rounded-xl overflow-hidden bg-[#0d1117] border-4 transition-all duration-300 z-20 ${videoUrl ? (isDistracted ? 'border-red-600 animate-pulse' : 'border-cyan-400') : 'border-gray-800'}`}>
         {!videoUrl ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer" onClick={() => fileInputRef.current.click()}>
-            <div className="text-8xl mb-6 opacity-50 animate-bounce">🎸</div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer group" onClick={() => fileInputRef.current.click()}>
+            {/* VIBRANT GUITAR: Lowered margin-bottom from mb-6 to mb-2 for tighter grouping */}
+            <div className="text-8xl mb-2 animate-bounce drop-shadow-[0_0_15px_rgba(220,38,38,0.6)]">🎸</div>
             <h2 className="text-4xl font-bold text-white uppercase tracking-tighter text-center">Stage Empty</h2>
-            <button className="mt-4 px-6 py-2 bg-cyan-500/20 text-cyan-400 border border-cyan-500 rounded font-mono uppercase">Load Video Here</button>
+            <button className="mt-4 px-6 py-2 bg-cyan-500/20 text-cyan-400 border border-cyan-500 rounded font-mono uppercase group-hover:bg-cyan-500 group-hover:text-black transition-colors">Load Video Here</button>
           </div>
         ) : (
           <>
@@ -265,7 +259,7 @@ const SmartPlayer = () => {
                                 </div>
                                 <div className="bg-gray-900 p-4 rounded-xl border border-gray-800">
                                     <p className="text-gray-500 text-[10px] uppercase font-bold">Flow State</p>
-                                    <p className="text-2xl font-bold text-green-500">
+                                    <p className="text-2xl font-bold text-green-500 uppercase tracking-tighter">
                                         {metrics.distractionCount === 0 ? "ELITE" : metrics.distractionCount < 3 ? "STEADY" : "WOBBLY"}
                                     </p>
                                 </div>
@@ -283,10 +277,10 @@ const SmartPlayer = () => {
 
       {/* CONTROLS */}
       <div className="mt-8 flex gap-4 z-20">
-         <button onClick={startCalibration} className="px-6 py-3 bg-gray-800 text-white rounded-lg font-bold border border-gray-600 uppercase text-xs">⚖️ Calibrate</button>
+         <button onClick={startCalibration} className="px-6 py-3 bg-gray-800 text-white rounded-lg font-bold border border-gray-600 uppercase text-xs hover:bg-gray-700 transition">⚖️ Calibrate</button>
          <input type="file" accept="video/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-         <button onClick={() => fileInputRef.current.click()} className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg font-bold uppercase text-xs">💿 Load Video</button>
-         <button onClick={() => setShowTrackList(!showTrackList)} className={`px-6 py-3 rounded-lg font-bold border uppercase text-xs transition ${showTrackList ? "bg-purple-600 text-white" : "bg-gray-800 text-purple-300"}`}>📝 Track List</button>
+         <button onClick={() => fileInputRef.current.click()} className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg font-bold uppercase text-xs shadow-lg shadow-cyan-500/20">💿 Load Video</button>
+         <button onClick={() => setShowTrackList(!showTrackList)} className={`px-6 py-3 rounded-lg font-bold border uppercase text-xs transition ${showTrackList ? "bg-purple-600 text-white border-purple-400" : "bg-gray-800 text-purple-300 border-gray-600"}`}>📝 Track List</button>
       </div>
 
       {/* TRACK LIST */}
