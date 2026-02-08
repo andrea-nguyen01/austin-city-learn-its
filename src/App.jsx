@@ -14,10 +14,7 @@ function App() {
       {/* THE HIDDEN EYE TRACKER */}
       <EyeTracker />
       
-      {/* DEBUG TEXT (To prove it's working) */}
-      <p className="mt-10 text-gray-500 text-sm">
-        Camera active? If you see this text, React is running.
-      </p>
+
     </div>
   );
 }
