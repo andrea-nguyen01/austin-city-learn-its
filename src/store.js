@@ -5,6 +5,7 @@ export const useStore = create((set) => ({
   isDistracted: false,
   isCalibrating: false,
   calibration: { pitchOffset: 0, yawOffset: 0 }, // Stores the user's "neutral" face
+  quizQuestions: [], // New state for quiz questions
 
   // Actions
   setDistracted: (status) => set({ isDistracted: status }),
@@ -13,4 +14,5 @@ export const useStore = create((set) => ({
     isCalibrating: false 
   }),
   startCalibration: () => set({ isCalibrating: true }),
+  setQuizQuestions: (questions) => set({ quizQuestions: questions }),
 }));

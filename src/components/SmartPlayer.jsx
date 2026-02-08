@@ -11,50 +11,10 @@ const DEMO_CHAPTERS = [
   { time: 130, title: "Final Complexity Recap" }
 ];
 
-const FOCUS_CHECKS = [
-  {
-    id: "q1",
-    triggerTime: 15, // End of the intro
-    rewindTime: 0,   // Start of intro
-    question: "What is the primary difference between Dijkstra's and Minimum Spanning Trees (MST)?",
-    choices: [
-      "Dijkstra connects all nodes with the lowest possible total weight.",
-      "Dijkstra finds the shortest path from a single source to every other node.",
-      "Dijkstra only works on undirected graphs without cycles.",
-      "There is no algorithmic difference between the two."
-    ],
-    correctIndex: 1
-  },
-  {
-    id: "q2",
-    triggerTime: 45, // After table setup explanation
-    rewindTime: 15,  // Start of table setup
-    question: "Why does the algorithm initialize all non-starting node distances to 'Infinity'?",
-    choices: [
-      "To mark those nodes as physically unreachable.",
-      "To ensure any valid path found during relaxation is initially recognized as shorter.",
-      "Because the algorithm cannot process negative edge weights.",
-      "To signify the node has already been added to the visited list."
-    ],
-    correctIndex: 1
-  },
-  {
-    id: "q3",
-    triggerTime: 75, // After the first relaxation step
-    rewindTime: 46,  // Start of relaxation explanation
-    question: "In the 'Relaxation' step, when is a node's value in the distance table updated?",
-    choices: [
-      "Every time the algorithm visits a new neighbor node.",
-      "Only if the sum of the source distance and edge weight is less than the current table value.",
-      "When the user manually overrides the greedy selection.",
-      "After all nodes have been explored at least once."
-    ],
-    correctIndex: 1
-  }
-];
+
 
 const SmartPlayer = () => {
-  const { isDistracted, startCalibration } = useStore();
+  const { isDistracted, startCalibration, setQuizQuestions, quizQuestions } = useStore();
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
   
@@ -63,11 +23,12 @@ const SmartPlayer = () => {
   const [fileName, setFileName] = useState("");
   const [isAudioStarted, setIsAudioStarted] = useState(false);
   const [showTrackList, setShowTrackList] = useState(false);
+  const [isProcessingVideo, setIsProcessingVideo] = useState(false); // New state for loading indicator
   
   // PERFORMANCE METRICS
   const [metrics, setMetrics] = useState({
     firstAttemptCorrect: 0,
-    totalQuestions: FOCUS_CHECKS.length,
+    totalQuestions: 0, // This will be set after quiz questions are loaded
     distractionCount: 0,
     showReport: false,
     questionsAttempted: new Set() 
@@ -108,11 +69,11 @@ const SmartPlayer = () => {
   // --- 2. LOGIC LOOP ---
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !videoUrl || !isAudioStarted) return; 
+    if (!video || !videoUrl || !isAudioStarted || quizQuestions.length === 0) return; 
 
     const handleTimeUpdate = () => {
         const currentTime = Math.floor(video.currentTime);
-        const check = FOCUS_CHECKS.find(c => c.triggerTime === currentTime);
+        const check = quizQuestions.find(c => c.trigger_time === currentTime);
         
         if (check && !activeCheck && !completedTimes.has(currentTime)) {
             video.pause();
@@ -144,18 +105,18 @@ const SmartPlayer = () => {
         video.removeEventListener('timeupdate', handleTimeUpdate);
         video.removeEventListener('ended', handleVideoEnd);
     };
-  }, [isDistracted, videoUrl, isAudioStarted, activeCheck, completedTimes, metrics.showReport]);
+  }, [isDistracted, videoUrl, isAudioStarted, activeCheck, completedTimes, metrics.showReport, quizQuestions]);
 
   // --- 3. UPDATED ANSWER HANDLER ---
   const handleAnswer = (index) => {
     setSelectedAnswer(index);
-    const correct = index === activeCheck.correctIndex;
+    const correct = index === activeCheck.correct_index; // Use activeCheck.correct_index
     setIsCorrect(correct);
     const isFirstAttempt = !metrics.questionsAttempted.has(activeCheck.id);
 
     if (correct) {
       feedbackSynth.current.triggerAttackRelease(["C4", "E4", "G4"], "4n");
-      setCompletedTimes(prev => new Set(prev).add(activeCheck.triggerTime));
+      setCompletedTimes(prev => new Set(prev).add(activeCheck.trigger_time)); // Use activeCheck.trigger_time
       
       if (isFirstAttempt) {
         setMetrics(prev => ({ 
@@ -179,7 +140,7 @@ const SmartPlayer = () => {
 
       setTimeout(() => {
         // Rewind to specific Concept Explanation Time
-        videoRef.current.currentTime = activeCheck.rewindTime; 
+        videoRef.current.currentTime = activeCheck.rewind_time; // Use activeCheck.rewind_time
         setActiveCheck(null);
         setIsCorrect(null);
         setSelectedAnswer(null);
@@ -189,11 +150,42 @@ const SmartPlayer = () => {
 
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
-    if (file) {
+    if (!file) return;
+
+    setIsProcessingVideo(true);
+    setQuizQuestions([]); // Clear previous quizzes
+    setVideoUrl(null); // Clear previous video
+
+    try {
       await Tone.start();
       setIsAudioStarted(true);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:8000/process-multimodal', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const quizData = await response.json();
+      console.log("Received quiz data:", quizData);
+      setQuizQuestions(quizData);
+      setMetrics(prev => ({ ...prev, totalQuestions: quizData.length })); // Update total questions
+
+      // Set video URL AFTER quiz data is loaded
       setVideoUrl(URL.createObjectURL(file));
       setFileName(file.name);
+
+    } catch (error) {
+      console.error("Error processing video:", error);
+      alert("Failed to process video: " + error.message);
+    } finally {
+      setIsProcessingVideo(false);
     }
   };
 
@@ -230,9 +222,9 @@ const SmartPlayer = () => {
                         <h3 className="text-cyan-400 font-mono mb-4 text-sm uppercase tracking-widest">🎤 Focus Check</h3>
                         <p className="text-white text-2xl font-bold mb-8 leading-tight">{activeCheck.question}</p>
                         <div className="space-y-4">
-                            {activeCheck.choices.map((choice, i) => {
+                            {activeCheck.options.map((choice, i) => {
                                 const isSelected = selectedAnswer === i;
-                                const isCorrectChoice = i === activeCheck.correctIndex;
+                                const isCorrectChoice = i === activeCheck.correct_index;
                                 let btnClass = "border-gray-700 text-gray-300 hover:border-cyan-500";
                                 if (isSelected) btnClass = isCorrectChoice ? "border-green-500 bg-green-500/20 text-green-400" : "border-red-500 bg-red-500/20 text-red-400 shake-animation";
                                 return (
@@ -283,7 +275,13 @@ const SmartPlayer = () => {
       <div className="mt-8 flex gap-4 z-20">
          <button onClick={startCalibration} className="px-6 py-3 bg-gray-800 text-white rounded-lg font-bold border border-gray-600 uppercase text-xs hover:bg-gray-700 transition">⚖️ Calibrate</button>
          <input type="file" accept="video/*" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-         <button onClick={() => fileInputRef.current.click()} className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg font-bold uppercase text-xs shadow-lg shadow-cyan-500/20">💿 Load Video</button>
+         <button 
+           onClick={() => fileInputRef.current.click()} 
+           className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg font-bold uppercase text-xs shadow-lg shadow-cyan-500/20"
+           disabled={isProcessingVideo} // Disable button during processing
+         >
+           {isProcessingVideo ? 'Processing...' : '💿 Load Video'}
+         </button>
          <button onClick={() => setShowTrackList(!showTrackList)} className={`px-6 py-3 rounded-lg font-bold border uppercase text-xs transition ${showTrackList ? "bg-purple-600 text-white border-purple-400" : "bg-gray-800 text-purple-300 border-gray-600"}`}>📝 Track List</button>
       </div>
 
